@@ -1,0 +1,298 @@
+---
+title: 'Circular Visualization in R: Chapter 9'
+author: "Lorene Stasiuk"
+date: "11/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("circlize")
+# creating default plot
+circos.initializeWithIdeogram()
+text(0, 0, "default", cex = 1)
+
+# info 
+circos.info()
+
+circos.clear()
+```
+
+```{r, species}
+# By default, circos.initializeWithIdeogram() initializes the plot with cytoband data of human genome hg19. Users can also initialize with other species by specifying species argument and it will automatically download cytoband files for corresponding species.
+
+circos.initializeWithIdeogram(species = "hg18")
+circos.initializeWithIdeogram(species = "mm10")
+
+circos.initializeWithIdeogram(chromosome.index = paste0("chr", c(3,5,2,8)))
+text(0, 0, "subset of chromosomes", cex = 1)
+
+circos.clear()
+```
+
+### Pre-defined tracks
+```{r, predefined_tracks}
+# After the initialization of the circular plot, circos.initializeWithIdeogram()  creates a track where there are genomic axes and chromosome names, and create another track where there is an ideogram (depends on whether cytoband data is available). plotType argument is used to control which type of tracks to add
+
+circos.initializeWithIdeogram(plotType = c("axis", "labels"))
+text(0, 0, "plotType = c('axis', 'labels')", cex = 1)
+circos.clear()
+
+circos.initializeWithIdeogram(plotType = NULL)
+text(0, 0, "plotType = NULL", cex = 1)
+
+circos.clear()
+```
+
+### Other general settings
+```{r, other}
+# Similar as general circular plot, the parameters for the layout can be controlled by circos.par()
+
+circos.par("start.degree" = 90)
+circos.initializeWithIdeogram()
+circos.clear()
+text(0, 0, "'start.degree' = 90", cex = 1)
+
+circos.par("gap.degree" = rep(c(2, 4), 12))
+circos.initializeWithIdeogram()
+circos.clear() # we explicitly set circos.par(), so we need to call circos.clear() to finish the plotting.
+text(0, 0, "'gap.degree' = rep(c(2, 4), 12)", cex = 1)
+```
+
+### Customize chromosome track
+```{r, custom_chromosome_track}
+# By default circos.initializeWithIdeogram() initializes the layout and adds two tracks. When plotType argument is set to NULL, the circular layout is only initialized but nothing is added. This makes it possible for users to completely design their own style of chromosome track.
+set.seed(123)
+circos.initializeWithIdeogram(plotType = NULL)
+circos.track(ylim = c(0, 1), panel.fun = function(x, y) {
+    chr = CELL_META$sector.index
+    xlim = CELL_META$xlim
+    ylim = CELL_META$ylim
+    circos.rect(xlim[1], 0, xlim[2], 1, col = rand_color(1))
+    circos.text(mean(xlim), mean(ylim), chr, cex = 0.7, col = "white",
+        facing = "inside", niceFacing = TRUE)
+}, track.height = 0.15, bg.border = NA)
+
+circos.clear()
+```
+
+### Initialize with general genomic category
+```{r, int_genomic_cat}
+# circos.genomicInitialize() can initialize circular layout with any type of genomic categories. The input data for circos.genomicInitialize() is also a data frame with at least three columns. The first column is genomic category (for cytoband data, it is chromosome name), and the next two columns are positions in each genomic category.
+
+df = data.frame(
+    name  = c("TP53",  "TP63",    "TP73"),
+    start = c(7565097, 189349205, 3569084),
+    end   = c(7590856, 189615068, 3652765))
+circos.genomicInitialize(df)
+
+# we plot the transcripts for TP53, TP63 and TP73 in a circular layout
+
+tp_family = readRDS(system.file(package = "circlize", "extdata", "tp_family_df.rds"))
+head(tp_family)
+
+# we first create a track which identifies three genes.
+
+circos.genomicInitialize(tp_family)
+circos.track(ylim = c(0, 1), 
+    bg.col = c("#FF000040", "#00FF0040", "#0000FF40"), 
+    bg.border = NA, track.height = 0.05)
+
+# Next, we put transcripts one after the other for each gene.
+
+n = max(tapply(tp_family$transcript, tp_family$gene, function(x) length(unique(x))))
+circos.genomicTrack(tp_family, ylim = c(0.5, n + 0.5), 
+    panel.fun = function(region, value, ...) {
+        all_tx = unique(value$transcript)
+        for(i in seq_along(all_tx)) {
+            l = value$transcript == all_tx[i]
+            # for each transcript
+            current_tx_start = min(region[l, 1])
+            current_tx_end = max(region[l, 2])
+            circos.lines(c(current_tx_start, current_tx_end), 
+                c(n - i + 1, n - i + 1), col = "#CCCCCC")
+            circos.genomicRect(region[l, , drop = FALSE], ytop = n - i + 1 + 0.4, 
+                ybottom = n - i + 1 - 0.4, col = "orange", border = NA)
+        }
+}, bg.border = NA, track.height = 0.4)
+circos.clear()
+```
+### Zooming chromosomes
+```{r, zoom}
+# We first define a function extend_chromosomes() which copy data in subset of chromosomes into the original data frame.
+
+extend_chromosomes = function(bed, chromosome, prefix = "zoom_") {
+    zoom_bed = bed[bed[[1]] %in% chromosome, , drop = FALSE]
+    zoom_bed[[1]] = paste0(prefix, zoom_bed[[1]])
+    rbind(bed, zoom_bed)
+}
+
+# We use read.cytoband() to download and read cytoband data from UCSC.
+cytoband = read.cytoband()
+cytoband_df = cytoband$df
+chromosome = cytoband$chromosome
+
+xrange = c(cytoband$chr.len, cytoband$chr.len[c("chr1", "chr2")])
+normal_chr_index = 1:24
+zoomed_chr_index = 25:26
+
+# normalize in normal chromsomes and zoomed chromosomes separately
+sector.width = c(xrange[normal_chr_index] / sum(xrange[normal_chr_index]), 
+                 xrange[zoomed_chr_index] / sum(xrange[zoomed_chr_index])) 
+
+# The extended cytoband data which is in form of a data frame is sent to circos.initializeWithIdeogram().
+
+circos.par(start.degree = 90)
+circos.initializeWithIdeogram(extend_chromosomes(cytoband_df, c("chr1", "chr2")), 
+    sector.width = sector.width)
+
+# Add a new track.
+
+bed = generateRandomBed(500)
+circos.genomicTrack(extend_chromosomes(bed, c("chr1", "chr2")),
+    panel.fun = function(region, value, ...) {
+        circos.genomicPoints(region, value, pch = 16, cex = 0.3)
+})
+
+# Add a link from original chromosome to the zoomed chromosome.
+
+circos.link("chr1", get.cell.meta.data("cell.xlim", sector.index = "chr1"),
+    "zoom_chr1", get.cell.meta.data("cell.xlim", sector.index = "zoom_chr1"),
+    col = "#00000020", border = NA)
+circos.clear()
+
+```
+
+### Concatenating two genomes
+```{r, concatenate_genome}
+# We may want to visualize more than one genomes in the circular plots. This can be done by making “a combined genome”. In the following example, we combine both human and mouse genomes.
+
+human_cytoband = read.cytoband(species = "hg19")$df
+mouse_cytoband = read.cytoband(species = "mm10")$df
+
+
+# Important: since the two genome will be combined, the chromosome names for each genome need to be adjusted. Here I simply add human_/mouse_ prefix.
+
+human_cytoband[ ,1] = paste0("human_", human_cytoband[, 1])
+mouse_cytoband[ ,1] = paste0("mouse_", mouse_cytoband[, 1])
+
+# Now we combine the two cytoband data frames into one.
+
+cytoband = rbind(human_cytoband, mouse_cytoband)
+head(cytoband)
+
+# Ideograms can be drawn for the combined genome.
+
+chromosome.index = c(paste0("human_chr", c(1:22, "X", "Y")), 
+                     rev(paste0("mouse_chr", c(1:19, "X", "Y"))))
+circos.initializeWithIdeogram(cytoband, chromosome.index = chromosome.index)
+
+circos.clear()
+```
+
+
+```{r, part2}
+# In the following improved code, I turn off the chromosome name and the axes. We create a small track to discriminate human chromosomes and mouse chromosomes (by highlight.chromosome()) and I only write the numeric indices (also X and Y) for chromosomes. A gap of 5 degrees is set between human and mouse chromosomes (by circos.par("gap.after")
+
+circos.par(gap.after = c(rep(1, 23), 5, rep(1, 20), 5))
+circos.initializeWithIdeogram(cytoband, plotType = NULL, 
+    chromosome.index = chromosome.index)
+circos.track(ylim = c(0, 1), panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[2] + mm_y(2), 
+        gsub(".*chr", "", CELL_META$sector.index), cex = 0.6, niceFacing = TRUE)
+}, track.height = mm_h(1), cell.padding = c(0, 0, 0, 0), bg.border = NA)
+highlight.chromosome(paste0("human_chr", c(1:22, "X", "Y")), 
+    col = "red", track.index = 1)
+highlight.chromosome(paste0("mouse_chr", c(1:19, "X", "Y")), 
+    col = "blue", track.index = 1)
+
+circos.genomicIdeogram(cytoband)
+
+circos.clear()
+```
+
+
+```{r, part3}
+human_chromInfo = read.chromInfo(species = "hg19")$df
+mouse_chromInfo = read.chromInfo(species = "mm10")$df
+human_chromInfo[ ,1] = paste0("human_", human_chromInfo[, 1])
+mouse_chromInfo[ ,1] = paste0("mouse_", mouse_chromInfo[, 1])
+chromInfo = rbind(human_chromInfo, mouse_chromInfo)
+# note the levels of the factor controls the chromosome orders in the plot
+chromInfo[, 1] = factor(chromInfo[ ,1], levels = chromosome.index)
+head(chromInfo)
+
+
+# The circular layout can also be created only by the chromosome ranges, i.e., the length of each chromosome. In the following code, read.chromInfo() can fetch the chromosome range for a specific genome.
+
+human_chromInfo = read.chromInfo(species = "hg19")$df
+mouse_chromInfo = read.chromInfo(species = "mm10")$df
+human_chromInfo[ ,1] = paste0("human_", human_chromInfo[, 1])
+mouse_chromInfo[ ,1] = paste0("mouse_", mouse_chromInfo[, 1])
+chromInfo = rbind(human_chromInfo, mouse_chromInfo)
+# note the levels of the factor controls the chromosome orders in the plot
+chromInfo[, 1] = factor(chromInfo[ ,1], levels = chromosome.index)
+head(chromInfo)
+
+# With the specified chromosome ranges, circos.genomicInitialize() is used to initialize the layout
+
+circos.par(gap.after = c(rep(1, 23), 5, rep(1, 20), 5))
+circos.genomicInitialize(chromInfo, plotType = NULL)
+circos.track(ylim = c(0, 1), panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[2] + mm_y(2), 
+        gsub(".*chr", "", CELL_META$sector.index), cex = 0.6, niceFacing = TRUE)
+}, track.height = mm_h(1), cell.padding = c(0, 0, 0, 0), bg.border = NA)
+highlight.chromosome(paste0("human_chr", c(1:22, "X", "Y")), 
+    col = "red", track.index = 1)
+highlight.chromosome(paste0("mouse_chr", c(1:19, "X", "Y")), 
+    col = "blue", track.index = 1)
+
+circos.track(ylim = c(0, 1))
+
+circos.clear()
+```
+
+
+```{r, part4}
+# Adding more tracks has no difference to the single-genome plots. Here I create a track of points and add links between human and mouse genomes 
+
+circos.par(gap.after = c(rep(1, 23), 5, rep(1, 20), 5))
+circos.genomicInitialize(chromInfo, plotType = NULL)
+circos.track(ylim = c(0, 1), panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[2] + mm_y(2), 
+        gsub(".*chr", "", CELL_META$sector.index), cex = 0.6, niceFacing = TRUE)
+}, track.height = mm_h(1), cell.padding = c(0, 0, 0, 0), bg.border = NA)
+highlight.chromosome(paste0("human_chr", c(1:22, "X", "Y")), 
+    col = "red", track.index = 1)
+highlight.chromosome(paste0("mouse_chr", c(1:19, "X", "Y")), 
+    col = "blue", track.index = 1)
+
+circos.genomicIdeogram(cytoband)
+
+# a track of points
+human_df = generateRandomBed(200, species = "hg19")
+mouse_df = generateRandomBed(200, species = "mm10")
+human_df[ ,1] = paste0("human_", human_df[, 1])
+mouse_df[ ,1] = paste0("mouse_", mouse_df[, 1])
+df = rbind(human_df, mouse_df)
+circos.genomicTrack(df, panel.fun = function(region, value, ...) {
+    circos.genomicPoints(region, value, col = rand_color(1), cex = 0.5, ...)
+})
+
+# links between human and mouse genomes
+human_mid = data.frame(
+    chr = paste0("human_chr", 1:19),
+    mid = round((human_chromInfo[1:19, 2] + human_chromInfo[1:19, 3])/2)
+)
+mouse_mid = data.frame(
+    chr = paste0("mouse_chr", 1:19),
+    mid = round((mouse_chromInfo[1:19, 2] + mouse_chromInfo[1:19, 3])/2)
+)
+circos.genomicLink(human_mid, mouse_mid, col = rand_color(19))
+circos.clear()
+text(-0.9, -0.8, "Human\ngenome")
+text(0.9, 0.8, "Mouse\ngenome")
+```

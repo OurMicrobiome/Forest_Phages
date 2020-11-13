@@ -1,0 +1,43 @@
+---
+title: "Circular Visualization in R: Chapter 2"
+author: "Lorene Stasiuk"
+date: "11/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Chapter 2: Circular layout
+
+## 2.1 Coordinate transformation
+```{r, ch2_1}
+# To map graphics onto the circle, there exist transformations among several coordinate systems. First, there are data coordinate systems in which ranges for x-axes and y-axes are the ranges of original data. Second, there is a polar coordinate system in which these coordinates are mapped onto a circle. Finally, there is a canvas coordinate system in which graphics are really drawn on the graphic device
+
+# It should be noted that the circular plot is always drawn inside the circle which has radius of 1 (which means it is always a unit circle), and from outside to inside.
+```
+
+## 2.2 Rules for making the circular plot
+```{r, ch2_2}
+# The rule for making the circular plot
+
+# Initialize layout -> create track -> add graphics -> create track -> add graphics - ... -> clear
+
+# Note: Graphics can be added at any time as long as the tracks are created.
+
+
+```
+
+```{r, list}
+# 5.3: Phylogenetic trees
+
+# 6.1 - 6.3
+
+# chapter 9
+
+# 10.5 links
+
+# 13: nested zooming
+
+```
